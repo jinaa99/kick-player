@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="mn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kick тоглуулагч</title>
+  <link rel="icon" href="/logo" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap&subset=cyrillic" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="logo"><img src="/logo" alt="" onload="this.parentNode.classList.add('custom')" onerror="this.remove()" />K</span>Kick <b>тоглуулагч</b></div>
+    <form id="watchForm" class="watch" autocomplete="off">
+      <input id="channel" type="text" placeholder="Сувгийн нэр эсвэл kick.com/… холбоос" spellcheck="false" />
+      <button type="button" id="favToggle" class="ghost star" aria-pressed="false" disabled>☆</button>
+      <button type="submit">Үзэх</button>
+    </form>
+  </header>
+
+  <nav id="recent" class="recent" aria-label="Сүүлд үзсэн"></nav>
+
+  <main class="layout">
+    <aside class="sidebar" aria-label="Дуртай сувгууд">
+      <div class="side-head">
+        <span>Дуртай сувгууд <b id="favLiveCount" class="live-count"></b></span>
+        <button type="button" id="importOpen" class="link" title="Kick-ийн follow-уудыг импортлох">Импорт</button>
+      </div>
+      <form id="favAddForm" class="fav-add" autocomplete="off">
+        <input id="favAddInput" type="text" placeholder="+ Суваг нэмэх" spellcheck="false" />
+      </form>
+      <ul id="favList" class="fav-list"></ul>
+      <p id="favEmpty" class="muted side-empty">Одоохондоо хоосон. Суваг үзэж байхдаа ☆ дарах эсвэл «Импорт»-оор Kick-ийн follow-уудаа оруулна уу.</p>
+    </aside>
+
+    <section class="player-col">
+      <div id="stage" class="stage">
+        <video id="video" playsinline></video>
+        <div id="status" class="status" hidden></div>
+        <div id="pc" class="pc">
+          <div class="pc-bar"></div>
+          <div class="pc-row">
+            <button type="button" id="pcPlay" class="pc-btn" title="Тоглуулах / зогсоох (Space)"></button>
+            <div class="pc-vol">
+              <button type="button" id="pcMute" class="pc-btn" title="Дуу (M)"></button>
+              <input id="pcVolume" type="range" min="0" max="1" step="0.05" aria-label="Дууны түвшин" />
+            </div>
+            <span id="pcTime" class="pc-time">—</span>
+            <span id="pcLive" class="pc-live">LIVE</span>
+            <span id="pcLatency" class="pc-latency"></span>
+            <span class="pc-spacer"></span>
+            <button type="button" id="pcChat" class="pc-btn" title="Чат (C)"></button>
+            <button type="button" id="pcTheater" class="pc-btn" title="Театрын горим (T)"></button>
+            <button type="button" id="pcPip" class="pc-btn" title="Зураг доторх зураг"></button>
+            <button type="button" id="pcFull" class="pc-btn" title="Бүтэн дэлгэц (F)"></button>
+            <div class="pc-settings">
+              <button type="button" id="pcSettings" class="pc-btn" title="Тохиргоо" aria-expanded="false"></button>
+              <div id="pcMenu" class="pc-menu" hidden>
+            <label>Хоцрогдол
+              <select id="delay">
+                <option value="10">10 сек</option>
+                <option value="20">20 сек</option>
+                <option value="30">30 сек</option>
+                <option value="45">45 сек</option>
+              </select>
+            </label>
+            <label>Чанар
+              <select id="quality"><option value="max">Хамгийн өндөр</option><option value="auto">Автомат</option></select>
+            </label>
+            <label>Горим
+              <select id="mode">
+                <option value="proxy">Прокси (зэрэгцээ татах)</option>
+                <option value="direct">Шууд (нэг холболт)</option>
+              </select>
+            </label>
+            <label>Зэрэгцээ
+              <select id="concurrency">
+                <option>2</option><option>3</option><option>4</option><option>6</option><option>8</option>
+              </select>
+            </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="meter" id="meter">
+        <div class="meter-head">
+          <span>Буфер (урагшаа)</span>
+          <span><b id="bufSec">0.0</b> / <span id="bufTarget">20</span> сек</span>
+        </div>
+        <div class="meter-bar"><div id="bufFill" class="meter-fill"></div></div>
+      </div>
+
+      <div class="controls">
+        <div class="control-buttons">
+          <button type="button" id="manualToggle" class="ghost">Гараар оруулах</button>
+          <button type="button" id="chatToggle" class="ghost">Чат</button>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="tile"><span>Чанар</span><b id="sQuality">—</b></div>
+        <div class="tile"><span>Хурдны тооцоо</span><b id="sBw">—</b></div>
+        <div class="tile"><span>Эфирээс хоцрогдол</span><b id="sLatency">—</b></div>
+        <div class="tile"><span>Гацалт</span><b id="sStalls">0</b></div>
+        <div class="tile"><span>Эх сурвалж</span><b id="sMethod">—</b></div>
+      </div>
+
+      <div class="stats proxy" id="proxyStats">
+        <div class="tile"><span>Кэш онох / хүлээсэн / алдсан</span><b id="pHits">—</b></div>
+        <div class="tile"><span>Дундаж сегмент</span><b id="pSeg">—</b></div>
+        <div class="tile"><span>Одоогийн урсгал</span><b id="pThroughput">—</b></div>
+        <div class="tile"><span>Идэвхтэй татан авалт</span><b id="pActive">—</b></div>
+        <div class="tile"><span>DVR / кэш</span><b id="pDvr">—</b></div>
+      </div>
+
+      <section id="manual" class="manual" hidden>
+        <h2>Гараар оруулах</h2>
+        <p id="manualReason" class="muted"></p>
+        <ol class="muted">
+          <li><a id="apiLink" href="https://kick.com/api/v2/channels/" target="_blank" rel="noopener">API хуудсыг</a> хөтөч дээрээ нээнэ.</li>
+          <li>Бүх текстийг хуулна (⌘A, ⌘C), эсвэл зөвхөн <code>.m3u8</code> холбоосыг хуулна.</li>
+          <li>Доор буулгаад «Ачаалах» дарна.</li>
+        </ol>
+        <textarea id="manualText" rows="4" placeholder='https://…m3u8  эсвэл  {"id":…,"playback_url":"…"}'></textarea>
+        <div class="manual-actions">
+          <button type="button" id="manualLoad">Ачаалах</button>
+          <button type="button" id="manualClose" class="ghost">Хаах</button>
+        </div>
+      </section>
+
+      <p class="hint"><kbd>T</kbd> театр · <kbd>F</kbd> бүтэн дэлгэц · <kbd>Space</kbd> тоглуулах/зогсоох · <kbd>M</kbd> дуу · <kbd>C</kbd> чат</p>
+    </section>
+
+    <aside id="chat" class="chat" hidden>
+      <div class="chat-head">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" id="tabNative" class="tab" aria-selected="true">Чат</button>
+          <button type="button" role="tab" id="tabKick" class="tab" aria-selected="false" title="Kick-ийн өөрийн чат — нэвтэрсэн бол бичиж болно">Kick (бичих)</button>
+        </div>
+        <a id="chatPopout" href="#" target="_blank" rel="noopener" title="Kick чатыг тусдаа цонхонд нээж бичих">Бичих ↗</a>
+      </div>
+      <div id="paneNative" class="chat-pane">
+        <div id="chatList" class="chat-list" aria-live="off"></div>
+        <button type="button" id="chatMore" class="chat-more" hidden>Шинэ мессежүүд ↓</button>
+        <div class="chat-foot">
+          <label title="Видео шууд эфирээс хоцорч байгаа тул чатыг мөн адил хойшлуулна"><input type="checkbox" id="chatSync" /> Видеотой тааруулах</label>
+          <span id="chatDelay" class="muted"></span>
+        </div>
+      </div>
+      <div id="paneKick" class="chat-pane" hidden>
+        <iframe id="chatFrame" title="Kick чат" referrerpolicy="origin"></iframe>
+        <p id="chatBlocked" class="muted chat-blocked" hidden>Kick чатыг энд оруулах боломжгүй байна. «Бичих ↗» холбоосоор тусдаа цонхонд нээнэ үү.</p>
+      </div>
+    </aside>
+  </main>
+
+  <dialog id="importDialog" class="dialog">
+    <h2>Kick-ийн follow-уудыг импортлох</h2>
+    <p class="muted">Kick-д follow жагсаалт авах албан ёсны API байхгүй тул таны нэвтрэлтийн токеныг нэг удаа ашиглана. Токен хаана ч хадгалагдахгүй, зөвхөн сувгийн нэрс таны дуртай жагсаалтад нэмэгдэнэ.</p>
+    <ol class="muted">
+      <li>kick.com-д нэвтэрсэн Chrome дээр <kbd>⌥⌘I</kbd> дарж DevTools нээнэ.</li>
+      <li><b>Application</b> → <b>Cookies</b> → <code>https://kick.com</code> → <code>session_token</code> мөрийн <b>Value</b>-г хуулна.<br />(Safari: Develop → Show Web Inspector → Storage → Cookies)</li>
+      <li>Доор буулгаад «Импортлох» дарна.</li>
+    </ol>
+    <p class="warn-text">⚠ Энэ токен таны аккаунтын түлхүүр. Өөр хэнд ч, өөр сайтад ч бүү өгөөрэй.</p>
+    <input id="importToken" type="password" placeholder="session_token утга" autocomplete="off" spellcheck="false" />
+    <p id="importMsg" class="muted"></p>
+    <div class="manual-actions">
+      <button type="button" id="importRun">Импортлох</button>
+      <button type="button" id="importClose" class="ghost">Хаах</button>
+    </div>
+  </dialog>
+
+  <script src="/vendor/hls.min.js"></script>
+  <script src="/chat.js"></script>
+  <script src="/channels.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

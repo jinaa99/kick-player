@@ -1,9 +1,11 @@
-<!-- BEGIN:nextjs-agent-rules -->
+# Kick player
 
-# This is NOT the Next.js you know
+Plain Node.js (ESM, no framework, no build step) local server plus a static single-page frontend.
+Not a Next.js project — the original create-next-app scaffold was removed.
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->
+- `npm start` → `node server.mjs`, serves http://localhost:8080 (bound to 127.0.0.1).
+- Only runtime dependency: `hls.js`, served from `node_modules/hls.js/dist/hls.min.js` at `/vendor/hls.min.js`.
+- `lib/proxy.mjs` is the core: playlist rewriting, parallel segment prefetch into an LRU cache, and a server-side
+  DVR window (Kick/IVS media playlists only hold ~28 s, so delays > ~25 s depend on it).
+- Kick's API is behind Cloudflare: Node's TLS fingerprint usually gets 403, system `curl` usually gets 200.
+- UI text and README are in Mongolian (Cyrillic).
