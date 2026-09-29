@@ -27,6 +27,7 @@ const KickChat = (() => {
   let reconnectTimer = null;
   let pingTimer = null;
   let stuckToBottom = true;
+  const localIds = new Set(); // messages we sent and already showed; skip their websocket echo
 
   const $ = (id) => document.getElementById(id);
   const list = () => $('chatList');
@@ -192,6 +193,7 @@ const KickChat = (() => {
           send({ event: 'pusher:pong', data: {} });
           break;
         case 'App\\Events\\ChatMessageEvent':
+          if (data?.id && localIds.delete(data.id)) break;
           if (data) pending.push({ data, at: Date.now() });
           if (pending.length > 2000) pending.splice(0, pending.length - 2000);
           break;
@@ -293,5 +295,14 @@ const KickChat = (() => {
     pingTimer = setInterval(() => send({ event: 'pusher:ping', data: {} }), 60000);
   }
 
-  return { init, start, stop };
+  /** Show a message we just sent right away (not delay-synced: it went out live). */
+  function addLocal({ id, content, username }) {
+    if (id) localIds.add(id);
+    const el = renderMessage({ id, content, type: 'message', sender: { username, identity: { color: '#53fc18', badges: [] } } });
+    el.classList.add('mine');
+    stuckToBottom = true;
+    addToList([el]);
+  }
+
+  return { init, start, stop, addLocal };
 })();

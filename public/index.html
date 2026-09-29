@@ -60,6 +60,7 @@
               <div id="pcMenu" class="pc-menu" hidden>
             <label>Хоцрогдол
               <select id="delay">
+                <option value="5">5 сек (эрсдэлтэй)</option>
                 <option value="10">10 сек</option>
                 <option value="20">20 сек</option>
                 <option value="30">30 сек</option>
@@ -139,21 +140,48 @@
       <div class="chat-head">
         <div class="tabs" role="tablist">
           <button type="button" role="tab" id="tabNative" class="tab" aria-selected="true">Чат</button>
-          <button type="button" role="tab" id="tabKick" class="tab" aria-selected="false" title="Kick-ийн өөрийн чат — нэвтэрсэн бол бичиж болно">Kick (бичих)</button>
+          <button type="button" role="tab" id="tabKick" class="tab" aria-selected="false" title="kick.com-ын өөрийн чат (Chrome дээр kick.com-д нэвтэрсэн бол)">Kick</button>
         </div>
-        <a id="chatPopout" href="#" target="_blank" rel="noopener" title="Kick чатыг тусдаа цонхонд нээж бичих">Бичих ↗</a>
+        <a id="chatPopout" href="#" target="_blank" rel="noopener" title="Kick чатыг тусдаа цонхонд нээх">Цонхонд ↗</a>
       </div>
       <div id="paneNative" class="chat-pane">
-        <div id="chatList" class="chat-list" aria-live="off"></div>
-        <button type="button" id="chatMore" class="chat-more" hidden>Шинэ мессежүүд ↓</button>
-        <div class="chat-foot">
-          <label title="Видео шууд эфирээс хоцорч байгаа тул чатыг мөн адил хойшлуулна"><input type="checkbox" id="chatSync" /> Видеотой тааруулах</label>
-          <span id="chatDelay" class="muted"></span>
+        <div class="chat-scroll">
+          <div id="chatList" class="chat-list" aria-live="off"></div>
+          <button type="button" id="chatMore" class="chat-more" hidden>Шинэ мессежүүд ↓</button>
+        </div>
+        <div class="chat-compose">
+          <div id="emotePicker" class="emote-picker" hidden>
+            <div id="emoteTabs" class="emote-tabs"></div>
+            <div id="emoteGrid" class="emote-grid"></div>
+          </div>
+          <div id="quickEmotes" class="quick-emotes" hidden></div>
+          <form id="composeForm" class="compose-box" autocomplete="off">
+            <span id="composeAvatar" class="compose-avatar" aria-hidden="true"></span>
+            <input id="composeInput" type="text" maxlength="500" placeholder="Мессеж бичих…" spellcheck="false" />
+            <button type="button" id="emoteBtn" class="compose-emote" title="Emote">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><circle cx="8.6" cy="10" r="1.5" fill="#15171c"/><circle cx="15.4" cy="10" r="1.5" fill="#15171c"/><path d="M7.5 14a5 5 0 0 0 9 0z" fill="#15171c"/></svg>
+            </button>
+          </form>
+          <p id="composeMsg" class="compose-msg"></p>
+          <div class="compose-bar">
+            <span id="chatDelay" class="compose-hint"></span>
+            <span class="compose-spacer"></span>
+            <div class="chat-settings">
+              <button type="button" id="chatSettingsBtn" class="compose-iconbtn" title="Чатын тохиргоо" aria-expanded="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="3" stroke-width="2"/><circle cx="12" cy="12" r="7.5" stroke-width="3.5" stroke-dasharray="2.6 3.3"/></svg>
+              </button>
+              <div id="chatSettings" class="chat-settings-menu" hidden>
+                <label title="Видео шууд эфирээс хоцорч байгаа тул чатыг мөн адил хойшлуулна. Таны бичсэн мессеж шууд харагдана."><input type="checkbox" id="chatSync" /> Видеотой тааруулах</label>
+                <div id="accountBox" class="account" hidden><span id="accountName"></span><button type="button" id="logoutBtn" class="link">Гарах</button></div>
+              </div>
+            </div>
+            <button type="submit" form="composeForm" id="composeSend" class="compose-send">Чат</button>
+          </div>
         </div>
       </div>
       <div id="paneKick" class="chat-pane" hidden>
         <iframe id="chatFrame" title="Kick чат" referrerpolicy="origin"></iframe>
-        <p id="chatBlocked" class="muted chat-blocked" hidden>Kick чатыг энд оруулах боломжгүй байна. «Бичих ↗» холбоосоор тусдаа цонхонд нээнэ үү.</p>
+        <p id="chatBlocked" class="muted chat-blocked" hidden>Kick чатыг энд оруулах боломжгүй байна. «Цонхонд ↗» холбоосоор тусдаа цонхонд нээнэ үү.</p>
       </div>
     </aside>
   </main>
@@ -177,7 +205,29 @@
 
   <script src="/vendor/hls.min.js"></script>
   <script src="/chat.js"></script>
+  <dialog id="authDialog" class="dialog">
+    <h2>Чатад бичих тохиргоо (нэг удаа)</h2>
+    <p class="muted">Kick нь гадны апп-аас чатад бичихийг зөвхөн албан ёсны API-аар зөвшөөрдөг. Үүний тулд өөрийн Kick аккаунт дээр жижиг "app" үүсгэнэ — 3 минут орчим.</p>
+    <ol class="muted">
+      <li>kick.com → Settings → Security хэсэгт <b>2FA</b> асаасан байх шаардлагатай.</li>
+      <li><a href="https://kick.com/settings/developer" target="_blank" rel="noopener">kick.com/settings/developer</a> → <b>Create App</b>.</li>
+      <li>Нэр: дурын (жишээ нь "Kick тоглуулагч").<br />
+        <b>Redirect URL</b>: <code id="authRedirect"></code> <button type="button" id="authCopy" class="link">Хуулах</button></li>
+      <li>Scope-оос <b>user:read</b> (Read user information) болон <b>chat:write</b> (Write to Chat)-ийг сонгоно.</li>
+      <li>Гарч ирсэн <b>Client ID</b>, <b>Client Secret</b>-ийг доор буулгана.</li>
+    </ol>
+    <input id="authClientId" type="text" placeholder="Client ID" autocomplete="off" spellcheck="false" />
+    <input id="authClientSecret" type="password" placeholder="Client Secret" autocomplete="off" spellcheck="false" />
+    <p class="muted small">Эдгээр нь зөвхөн таны компьютер дээр (<code>~/.kick-player/</code>) хадгалагдана.</p>
+    <p id="authMsg" class="muted"></p>
+    <div class="manual-actions">
+      <button type="button" id="authSave">Хадгалаад нэвтрэх</button>
+      <button type="button" id="authClose" class="ghost">Хаах</button>
+    </div>
+  </dialog>
+
   <script src="/channels.js"></script>
+  <script src="/compose.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

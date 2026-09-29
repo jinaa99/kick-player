@@ -4,7 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { resolveChannel, parseManual, ResolveError, CHANNEL_RE } from './lib/resolve.mjs';
-import { channelsInfo, chatHistory, importFollows } from './lib/kick.mjs';
+import { channelsInfo, chatHistory, importFollows, emotes } from './lib/kick.mjs';
+import * as auth from './lib/auth.mjs';
 import { handleMaster, handleMedia, handleSeg, getStats, setConfig, config, ProxyError } from './lib/proxy.mjs';
 import { HttpError } from './lib/http.mjs';
 
@@ -17,6 +18,7 @@ const STATIC = {
   '/app.js': ['public/app.js', 'text/javascript; charset=utf-8'],
   '/chat.js': ['public/chat.js', 'text/javascript; charset=utf-8'],
   '/channels.js': ['public/channels.js', 'text/javascript; charset=utf-8'],
+  '/compose.js': ['public/compose.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['public/style.css', 'text/css; charset=utf-8'],
   '/vendor/hls.min.js': ['node_modules/hls.js/dist/hls.min.js', 'text/javascript; charset=utf-8'],
 };
@@ -26,7 +28,6 @@ function send(res, status, body, headers = {}) {
   res.writeHead(status, {
     'content-length': buf.length,
     'cache-control': 'no-store',
-    'access-control-allow-origin': '*',
     ...(typeof body === 'object' && !Buffer.isBuffer(body) ? { 'content-type': 'application/json; charset=utf-8' } : {}),
     ...headers,
   });
@@ -35,7 +36,7 @@ function send(res, status, body, headers = {}) {
 
 function sendError(res, e) {
   if (e instanceof ResolveError) return send(res, e.status, { error: e.message, code: e.code, attempts: e.attempts });
-  if (e instanceof ProxyError) return send(res, e.status, { error: e.message, code: e.code });
+  if (e instanceof ProxyError || e instanceof auth.AuthError) return send(res, e.status, { error: e.message, code: e.code });
   if (e.status && e.status >= 400 && e.status < 600 && !(e instanceof HttpError)) return send(res, e.status, { error: e.message });
   if (e instanceof HttpError) {
     // Pass token-expiry statuses through so the player knows to re-resolve.
@@ -75,9 +76,32 @@ async function readLogo() {
   return null;
 }
 
+// Only this page may use the server: a Host check stops DNS-rebinding pages, and state-changing requests must carry
+// a custom header (which forces a CORS preflight we never approve) from our own origin. This matters because the
+// server can post to Kick chat as you.
+const LOCAL_HOSTS = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`]);
+function allowed(req) {
+  if (!LOCAL_HOSTS.has(req.headers.host)) return false;
+  if (req.method === 'GET' || req.method === 'HEAD') return true;
+  const origin = req.headers.origin;
+  if (origin && !LOCAL_HOSTS.has(origin.replace(/^http:\/\//, ''))) return false;
+  return req.headers['x-kick-player'] === '1';
+}
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+function authPage(ok, message) {
+  // Shown in the login popup: tell the player window, then close.
+  return `<!doctype html><meta charset="utf-8"><title>Kick нэвтрэлт</title>
+<body style="background:#0d0e11;color:#e9eaee;font:16px system-ui;display:grid;place-items:center;height:100vh;margin:0;text-align:center">
+<div><p style="font-size:40px;margin:0">${ok ? '✔' : '✖'}</p><p>${esc(message)}</p></div>
+<script>try{window.opener&&window.opener.postMessage(${JSON.stringify(ok ? 'kick-auth-ok' : 'kick-auth-failed')},location.origin)}catch(e){}
+${ok ? 'setTimeout(()=>window.close(),900)' : ''}</script>`;
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const q = url.searchParams;
+  if (!allowed(req)) return send(res, 403, { error: 'Хориотой хүсэлт' });
   try {
     if (req.method === 'GET' && STATIC[url.pathname]) {
       const [file, type] = STATIC[url.pathname];
@@ -111,6 +135,37 @@ const server = http.createServer(async (req, res) => {
         if (req.method !== 'POST') return send(res, 405, { error: 'POST хэрэгтэй' });
         const { token } = JSON.parse((await readBody(req)) || '{}');
         return send(res, 200, { slugs: await importFollows(token) });
+      }
+      case '/api/emotes': {
+        const slug = (q.get('slug') || '').toLowerCase();
+        if (!CHANNEL_RE.test(slug)) return send(res, 400, { error: 'slug буруу' });
+        return send(res, 200, await emotes(slug));
+      }
+      case '/api/auth/status':
+        return send(res, 200, auth.status(PORT));
+      case '/api/auth/config': {
+        if (req.method !== 'POST') return send(res, 405, { error: 'POST хэрэгтэй' });
+        auth.setCredentials(JSON.parse((await readBody(req)) || '{}'));
+        return send(res, 200, auth.status(PORT));
+      }
+      case '/api/auth/logout': {
+        if (req.method !== 'POST') return send(res, 405, { error: 'POST хэрэгтэй' });
+        auth.logout();
+        return send(res, 200, auth.status(PORT));
+      }
+      case '/auth/login':
+        res.writeHead(302, { location: auth.authorizeUrl(PORT), 'cache-control': 'no-store' });
+        return res.end();
+      case '/auth/callback':
+        try {
+          await auth.handleCallback(q, PORT);
+          return send(res, 200, authPage(true, 'Kick-ээр нэвтэрлээ. Энэ цонх хаагдана.'), { 'content-type': 'text/html; charset=utf-8' });
+        } catch (e) {
+          return send(res, 400, authPage(false, e.message), { 'content-type': 'text/html; charset=utf-8' });
+        }
+      case '/api/chat/send': {
+        if (req.method !== 'POST') return send(res, 405, { error: 'POST хэрэгтэй' });
+        return send(res, 200, await auth.sendChat(JSON.parse((await readBody(req, 16384)) || '{}')));
       }
       case '/api/stats':
         return send(res, 200, getStats());

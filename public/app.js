@@ -96,7 +96,9 @@ function normalizeChannel(s) {
   return s.replace(/^@/, '').toLowerCase();
 }
 
-async function fetchJson(url, opts) {
+async function fetchJson(url, opts = {}) {
+  // The server rejects state-changing requests without this header (see allowed() in server.mjs).
+  if (opts.method && opts.method !== 'GET') opts = { ...opts, headers: { 'x-kick-player': '1', ...opts.headers } };
   const res = await fetch(url, opts);
   const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
   if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { data });
@@ -111,6 +113,7 @@ async function watch(name) {
   state.chatInfo = null;
   addRecent(ch);
   Channels.setCurrent(ch);
+  Compose.setChannel(ch);
   history.replaceState(null, '', `#${ch}`);
   hideManual();
   setChat(ch);
@@ -143,6 +146,8 @@ function sourceUrl() {
   const p = new URLSearchParams();
   if (state.channel) p.set('c', state.channel);
   p.set('m', state.mode);
+  // ≤10 s: the server polls every second and starts pulling segments while they are still being encoded.
+  if (state.delay <= 10) p.set('l', '1');
   p.set('u', state.upstream);
   return `/proxy/master.m3u8?${p}`;
 }
@@ -156,7 +161,9 @@ function hlsConfig(delay) {
     lowLatencyMode: false,
     liveSyncDuration: delay,
     liveMaxLatencyDuration: delay * 2 + 10,
-    maxLiveSyncPlaybackRate: 1,
+    // Low-latency mode drifts back to the target after a hiccup (1.05× is inaudible with pitch correction);
+    // the tolerant modes never speed up.
+    maxLiveSyncPlaybackRate: delay <= 10 ? 1.05 : 1,
     maxBufferLength: 90,
     maxMaxBufferLength: 180,
     backBufferLength: 30,
@@ -219,8 +226,11 @@ function prebufferThenPlay(hls) {
   const check = () => {
     if (state.hls !== hls) return;
     const ahead = bufferAhead();
-    const ready = ahead >= 4 && (hls.latency || 0) >= state.delay - 2;
+    const ready = ahead >= Math.min(4, state.delay * 0.4) && (hls.latency || 0) >= state.delay - (state.delay <= 10 ? 1 : 2);
     if (ready || Date.now() - t0 > 30000) {
+      // While we waited for the first segment the live edge kept moving; jump to the target if it's already buffered.
+      const target = hls.liveSyncPosition;
+      if (Number.isFinite(target) && target > video.currentTime + 1 && isBuffered(target)) video.currentTime = target;
       setStatus('');
       playWithSoundFallback();
       return;
@@ -335,6 +345,12 @@ function applyQuality(initial) {
 
 // ------------------------------------------------------------------ meters & stats
 
+function isBuffered(t) {
+  const b = video.buffered;
+  for (let i = 0; i < b.length; i++) if (b.start(i) <= t && b.end(i) - t > 1) return true;
+  return false;
+}
+
 function bufferAhead() {
   const b = video.buffered;
   const t = video.currentTime;
@@ -421,6 +437,7 @@ async function loadManual() {
     if (r.channel) {
       addRecent(r.channel);
       Channels.setCurrent(r.channel);
+      Compose.setChannel(r.channel);
       setChat(r.channel);
     }
     startChat();
@@ -445,7 +462,7 @@ async function startChat() {
     try {
       const [info] = await fetchJson(`/api/channels?slugs=${encodeURIComponent(ch)}`);
       if (state.channel !== ch || !info?.chatroomId) return;
-      state.chatInfo = { channelId: info.channelId, chatroomId: info.chatroomId, subBadges: info.subBadges };
+      state.chatInfo = { channelId: info.channelId, userId: info.userId, chatroomId: info.chatroomId, subBadges: info.subBadges };
     } catch {
       return;
     }
@@ -735,6 +752,10 @@ $('chatPopout').addEventListener('click', (e) => {
 });
 
 KickChat.init({ getLatency: () => state.hls?.latency });
+Compose.init({
+  // Who a message goes to: the broadcaster's user id, looked up with the chat info when the channel opens.
+  target: () => (state.channel ? { slug: state.channel, userId: state.chatInfo?.userId ?? null } : null),
+});
 Channels.init({
   watch: (slug) => {
     $('channel').value = slug;

@@ -140,7 +140,11 @@ const Channels = (() => {
     msg.className = 'muted';
     msg.textContent = 'Импортолж байна…';
     try {
-      const res = await fetch('/api/follows/import', { method: 'POST', body: JSON.stringify({ token: input.value }) });
+      const res = await fetch('/api/follows/import', {
+        method: 'POST',
+        headers: { 'x-kick-player': '1' },
+        body: JSON.stringify({ token: input.value }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       input.value = ''; // never keep the token around
